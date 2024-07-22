@@ -1,9 +1,16 @@
 package zarg.debitcredit.service;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+
+import java.math.BigDecimal;
+import java.util.UUID;
+import java.util.stream.IntStream;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.dao.DuplicateKeyException;
 import org.springframework.dao.OptimisticLockingFailureException;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
@@ -13,16 +20,10 @@ import org.testcontainers.junit.jupiter.Testcontainers;
 import zarg.debitcredit.domain.Account;
 import zarg.debitcredit.repositories.AccountRepository;
 
-import java.math.BigDecimal;
-import java.util.UUID;
-import java.util.stream.IntStream;
-
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertThrows;
-
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.NONE)
 @Testcontainers
 class DefaultDebitCreditServiceTest {
+
     @Container
     static MongoDBContainer mongoDBContainer = new MongoDBContainer("mongo:6.0");
 
@@ -64,7 +65,20 @@ class DefaultDebitCreditServiceTest {
     void shouldThrowLockExceptionWithParallelUpdatesAndOptimisticLocking() {
         String bid = account.getBid();
         assertThrows(OptimisticLockingFailureException.class,
-                () -> IntStream.rangeClosed(0, 10).parallel()
+                () -> IntStream.rangeClosed(0, 2).parallel()
                         .forEach(i -> service.credit(bid, BigDecimal.ONE)));
+    }
+
+    @Test
+    void shouldThrowDuplicateKeyExceptionWithParallelCreatesAndOptimisticLocking() {
+        Account newAccount = Account.Builder.builder()
+                .id(UUID.randomUUID().toString())
+                .balance(new BigDecimal("1.00"))
+                .name("NewAccount")
+                .bid(UUID.randomUUID().toString())
+                .build();
+        assertThrows(DuplicateKeyException.class,
+                () -> IntStream.rangeClosed(0, 2).parallel()
+                        .forEach(i -> accountRepository.save(newAccount)));
     }
 }
